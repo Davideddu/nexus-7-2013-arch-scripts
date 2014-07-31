@@ -5,7 +5,7 @@ _chroot="/data/arch"
 unset _tmp
 _tmp="/sdcard/losetup.txt"
 unset _rootfsimage
-_rootfsimage="${_chroot}.img"
+_rootfsimage="/data/media/0/multirom/roms/ArchLinux/root.img"
 
 # Checking if losetup is done
 busybox [ -e "$_tmp" ] && rm -f $_tmp
@@ -38,6 +38,10 @@ busybox mount -o bind /system $_chroot/media/system || exit 1
 
 USER=$1
 
+# SELinux will be a pain in the ass when building stuff from AUR. It's better disabled.
+echo "Setting SELinux policy to \"Permissive\"..."
+setenforce "Permissive" || echo "Unable to set SELinux enforcing policy. You will not be able to use fakeroot or do some operations."
+
 echo "Entering chroot..."
 CHROOT_SETUP="export TERM=xterm-256color; mount -t proc proc /proc; mount -t sysfs sysfs /sys; ln -s /proc/self/fd /dev/fd; source /etc/profile; clear"
 
@@ -50,16 +54,19 @@ case $USER in
     ;;
 esac
 
+echo "Setting SELinux policy to \"Enforcing\"..."
+setenforce "Enforcing"
+
 echo "chroot exited. umount..."
-umount $_chroot/media/sdcard || exit 1
-umount $_chroot/media/system || exit 1
-umount $_chroot/dev/pts || exit 1
-umount $_chroot/proc || exit 1
-umount $_chroot/sys || exit 1
+umount $_chroot/media/sdcard
+umount $_chroot/media/system
+umount $_chroot/dev/pts
+umount $_chroot/proc
+umount $_chroot/sys
 echo "killing existing processes in chroot..."
 busybox fuser -mk $_chroot
-umount $_chroot/dev || exit 1
-umount $_chroot || exit 1
+umount $_chroot/dev
+umount $_chroot
 echo "Deactivating loop..."
 busybox losetup -d /dev/loop256
 echo "Done. Bye!"
