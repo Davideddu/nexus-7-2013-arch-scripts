@@ -1,40 +1,47 @@
 #!/system/xbin/env ash
 
+ROM_NAME="ArchLinux"
 unset _chroot
-_chroot="/data/arch"
+#_chroot="/data/arch"
+unset _actual_chroot
+#_actual
+_chroot="/data/media/0/multirom/roms/$ROM_NAME/root/"
 unset _tmp
 _tmp="/sdcard/losetup.txt"
 unset _rootfsimage
-_rootfsimage="/data/media/0/multirom/roms/ArchLinux/root.img"
+_rootfsimage="/data/media/0/multirom/roms/$ROM_NAME/root.img"
 
-# Checking if losetup is done
-busybox [ -e "$_tmp" ] && rm -f $_tmp
-busybox losetup > $_tmp
-unset _line
+# # Checking if losetup is done
+# busybox [ -e "$_tmp" ] && rm -f $_tmp
+# busybox losetup > $_tmp
+# unset _line
 
-echo >> "$_tmp"
-while read _line; do
-   case "$_line" in
-      *"arch.img"* )
-         echo "Loop found."
-         break
-      ;;
-      * )
-         echo "Setting up loop"...
-         busybox mknod /dev/loop256 b 7 256 || echo "/dev/loop256 already exists, skipping..."
-         busybox losetup /dev/loop256 ${_rootfsimage} || exit 1
-      ;;
-   esac
-done < $_tmp
+# echo >> "$_tmp"
+# while read _line; do
+#    case "$_line" in
+#       *"root.img"* )
+#          echo "Loop found."
+#          break
+#       ;;
+#       * )
+#          echo "Setting up loop"...
+#          busybox mknod /dev/loop256 b 7 256 || echo "/dev/loop256 already exists, skipping..."
+#          busybox losetup /dev/loop256 ${_rootfsimage} || exit 1
+#       ;;
+#    esac
+# done < $_tmp
 
 echo "Mounting file systems..."
-busybox mount -t ext4 -o rw,noatime /dev/block/loop256 $_chroot || exit 1
-busybox mount -o bind /dev/ $_chroot/dev || exit 1
-busybox mount -t proc proc $_chroot/proc || exit 1
-busybox mount -t sysfs sysfs $_chroot/sys || exit 1
-busybox mount -t devpts devpts $_chroot/dev/pts || exit 1
-busybox mount -o bind /sdcard $_chroot/media/sdcard || exit 1
-busybox mount -o bind /system $_chroot/media/system || exit 1
+# Android makes sure you're not able to run anything in data, preventing sudo and a lot of stuff from running. This fixes it while the chroot is running.
+busybox mount -o remount,suid,exec,dev /data
+#busybox mount -t ext4 -o rw,noatime /dev/block/loop256 $_chroot || exit 1
+#busybox mount -o bind $_actual_chroot $_chroot || exit 1
+busybox mount -o bind /dev/ $_chroot/dev
+busybox mount -t proc proc $_chroot/proc
+busybox mount -t sysfs sysfs $_chroot/sys
+busybox mount -t devpts devpts $_chroot/dev/pts
+busybox mount -o bind /sdcard $_chroot/media/sdcard
+busybox mount -o bind /system $_chroot/media/system
 
 USER=$1
 
@@ -61,14 +68,27 @@ echo "chroot exited. umount..."
 umount $_chroot/media/sdcard
 umount $_chroot/media/system
 umount $_chroot/dev/pts
-umount $_chroot/proc
 umount $_chroot/sys
+
+# BUG!! This will kill *all* the other chroots when exiting!
+# If you want to keep the other chroots running, brutally kill
+# this script (e.g. kill the terminal)
+
 echo "killing existing processes in chroot..."
-busybox fuser -mk $_chroot
+#busybox fuser -mk $_chroot
+ls /proc | while read proc; do
+    if realpath "/proc/${proc}/exe" 2> /dev/null |  grep -q "${_chroot}"; then
+        kill "$proc"
+    fi
+done
+
+umount $_chroot/proc
 umount $_chroot/dev
-umount $_chroot
-echo "Deactivating loop..."
-busybox losetup -d /dev/loop256
+busybox mount -o remount,nosuid,noexec,nodev /data
+
+#umount $_chroot
+#echo "Deactivating loop..."
+#busybox losetup -d /dev/loop256
 echo "Done. Bye!"
 busybox [ -e "$_tmp" ] && rm -f $_tmp
 exit 0
